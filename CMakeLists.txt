@@ -10,6 +10,10 @@ add_executable(Lesson1
 	src/stb_image.cpp
 	src/mesh.h
 	src/model.h
+	src/window.h
+	src/window.cpp
+	src/events.h
+	src/events.cpp
 )
 
 set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)

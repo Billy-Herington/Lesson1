@@ -12,16 +12,25 @@ enum Camera_Movement {
     FORWARD,
     BACKWARD,
     LEFT,
-    RIGHT
+    RIGHT,
+    UP,
+    NO
 };
 
 // Параметры камеры по умолчанию
 const float YAW = -90.0f;
 const float PITCH = 0.0f;
-const float SPEED = 2.5f;
+const float SPEED = 5.0f;
 const float SENSITIVITY = 0.1f;
 const float ZOOM = 45.0f;
-
+bool OnGround = true;
+bool InBounce = false;
+bool InFall = false;
+float FallSpeed = 10.0f;
+float BounceSpeed = 20.0f;
+float Pi = 3.14159265f;
+int TimeInBounce = 0;
+int map[256][256];
 
 // Абстрактный класс камеры, который обрабатывает входные данные и вычисляет соответствующие углы Эйлера, векторы и матрицы для использования в OpenGL
 class Camera
@@ -69,18 +78,191 @@ public:
         return glm::lookAt(Position, Position + Front, Up);
     }
 
+    float getMapHeight()
+    {
+        float y = map[(int)Position.x][(int)Position.z];
+        return y;
+    }
+
+    void Collision(float deltaTime)
+    {
+        float DownVelocity = FallSpeed * deltaTime;
+        float UpVelocity = BounceSpeed * deltaTime;
+        float y = getMapHeight();
+
+        if (y < Position.y - 1.7)
+        {
+            OnGround = false;
+        }
+        else
+        {
+            OnGround = true;
+            InFall = false;
+        }
+
+        if (OnGround == false && InBounce == false)
+            InFall = true;
+
+        if (InBounce == true)
+        {
+            Position.y += UpVelocity;
+            TimeInBounce++;
+        }
+
+        if (TimeInBounce > 6)
+        {
+            InBounce = false;
+            TimeInBounce = 0;
+        }
+
+        if (OnGround == false)
+            Position.y -= DownVelocity;
+    }
+
+    bool CheckObstacle(glm::vec3 Move)
+    {
+        glm::vec3 NewPosition = Move;
+        if (OnGround == true)
+            if (map[(int)Position.x][(int)Position.z] >= map[(int)NewPosition.x][(int)NewPosition.z])
+                return true;
+            else
+                return false;
+        else
+            if (Position.y - 1.7f >= map[(int)NewPosition.x][(int)NewPosition.z])
+                return true;
+            else
+                return false;
+    }
+
     // Обрабатываем входные данные, полученные от клавиатурной системы ввода. Принимаем входной параметр в виде определенного камерой перечисления (для абстрагирования его от оконных систем)
-    void ProcessKeyboard(Camera_Movement direction, float deltaTime)
+    void ProcessKeyboard(Camera_Movement directionX, Camera_Movement directionY, Camera_Movement directionZ, float deltaTime)
     {
         float velocity = MovementSpeed * deltaTime;
-        if (direction == FORWARD)
-            Position += Front * velocity;
-        if (direction == BACKWARD)
-            Position -= Front * velocity;
-        if (direction == LEFT)
-            Position -= Right * velocity;
-        if (direction == RIGHT)
-            Position += Right * velocity;
+        float upVelocity = BounceSpeed * deltaTime;
+        glm::vec3 front = glm::cross(WorldUp, Right);
+
+        if (directionY == UP && OnGround == true)
+        {
+            if (directionZ == NO)
+            {
+                if (directionX == NO)
+                {
+                    InBounce = true;
+                }
+                else
+                {
+                    InBounce = true;
+                    if (directionX == FORWARD && CheckObstacle(Position + front * velocity))
+                        Position += front * velocity * 0.75f;
+                    if (directionX == BACKWARD && CheckObstacle(Position -front * velocity))
+                        Position -= front * velocity * 0.75f;
+                    if (directionX == LEFT && CheckObstacle(Position - Right * velocity))
+                        Position -= Right * velocity * 0.75f;
+                    if (directionX == RIGHT && CheckObstacle(Position + Right * velocity))
+                        Position += Right * velocity * 0.75f;
+                }
+            }
+            else
+            {
+                InBounce = true;
+                if (directionX == FORWARD && CheckObstacle(Position + front * velocity))
+                    Position += front * velocity * 0.5f;
+                if (directionZ == LEFT && CheckObstacle(Position - Right * velocity))
+                    Position -= Right * velocity * 0.25f;
+                if (directionZ == RIGHT && CheckObstacle(Position + Right * velocity))
+                    Position += Right * velocity * 0.25f;
+                if (directionX == BACKWARD && CheckObstacle(Position - front * velocity))
+                    Position -= front * velocity * 0.5f;
+                if (directionZ == LEFT && CheckObstacle(Position - Right * velocity))
+                    Position -= Right * velocity * 0.25f;
+                if (directionZ == RIGHT && CheckObstacle(Position + Right * velocity))
+                    Position += Right * velocity * 0.25f;
+            }
+        }
+
+        if (directionY == NO && (InBounce == true || InFall == true))
+        {
+            if (directionZ == NO)
+            {
+                if (directionX == FORWARD && CheckObstacle(Position + front * velocity))
+                    Position += front * velocity;
+                if (directionX == BACKWARD && CheckObstacle(Position - front * velocity))
+                    Position -= front * velocity;
+                if (directionX == LEFT && CheckObstacle(Position - Right * velocity))
+                    Position -= Right * velocity;
+                if (directionX == RIGHT && CheckObstacle(Position + Right * velocity))
+                    Position += Right * velocity;
+                /*
+                if (directionX == FORWARD && CheckObstacle(Position + front * velocity))
+                    Position += front * velocity * 0.75f;
+                if (directionX == BACKWARD && CheckObstacle(Position - front * velocity))
+                    Position -= front * velocity * 0.75f;
+                if (directionX == LEFT && CheckObstacle(Position - Right * velocity))
+                    Position -= Right * velocity * 0.75f;
+                if (directionX == RIGHT && CheckObstacle(Position + Right * velocity))
+                    Position += Right * velocity * 0.75f;
+                */
+            }
+            else
+            {
+                if (directionX == FORWARD && CheckObstacle(Position + front * velocity * 0.7f))
+                    Position += front * velocity * 0.7f;
+                if (directionZ == LEFT && CheckObstacle(Position - Right * velocity * 0.7f))
+                    Position -= Right * velocity * 0.35f;
+                if (directionZ == RIGHT && CheckObstacle(Position + Right * velocity * 0.7f))
+                    Position += Right * velocity * 0.35f;
+                if (directionX == BACKWARD && CheckObstacle(Position - front * velocity * 0.7f))
+                    Position -= front * velocity * 0.7f;
+                if (directionZ == LEFT && CheckObstacle(Position - Right * velocity * 0.7f))
+                    Position -= Right * velocity * 0.35f;
+                if (directionZ == RIGHT && CheckObstacle(Position + Right * velocity * 0.7f))
+                    Position += Right * velocity * 0.35f;
+                /*
+                if (directionX == FORWARD && CheckObstacle(Position + front * velocity))
+                    Position += front * velocity * 0.5f;
+                if (directionZ == LEFT && CheckObstacle(Position - Right * velocity))
+                    Position -= Right * velocity * 0.25f;
+                if (directionZ == RIGHT && CheckObstacle(Position + Right * velocity))
+                    Position += Right * velocity * 0.25f;
+                if (directionX == BACKWARD && CheckObstacle(Position - front * velocity))
+                    Position -= front * velocity * 0.5f;
+                if (directionZ == LEFT && CheckObstacle(Position - Right * velocity))
+                    Position -= Right * velocity * 0.25f;
+                if (directionZ == RIGHT && CheckObstacle(Position + Right * velocity))
+                    Position += Right * velocity * 0.25f;
+                */
+            }
+        }
+
+        if (directionY == NO && OnGround == true)
+        {
+            if (directionZ == NO)
+            {
+                if (directionX == FORWARD && CheckObstacle(Position + front * velocity))
+                    Position += front * velocity;
+                if (directionX == BACKWARD && CheckObstacle(Position - front * velocity))
+                    Position -= front * velocity;
+                if (directionX == LEFT && CheckObstacle(Position - Right * velocity))
+                    Position -= Right * velocity;
+                if (directionX == RIGHT && CheckObstacle(Position + Right * velocity))
+                    Position += Right * velocity;
+            }
+            else
+            {
+                if (directionX == FORWARD && CheckObstacle(Position + front * velocity * 0.7f))
+                    Position += front * velocity * 0.7f;
+                if (directionZ == LEFT && CheckObstacle(Position - Right * velocity * 0.7f))
+                    Position -= Right * velocity * 0.35f;
+                if (directionZ == RIGHT && CheckObstacle(Position + Right * velocity * 0.7f))
+                    Position += Right * velocity * 0.35f;
+                if (directionX == BACKWARD && CheckObstacle(Position - front * velocity * 0.7f))
+                    Position -= front * velocity * 0.7f;
+                if (directionZ == LEFT && CheckObstacle(Position - Right * velocity * 0.7f))
+                    Position -= Right * velocity * 0.35f;
+                if (directionZ == RIGHT && CheckObstacle(Position + Right * velocity * 0.7f))
+                    Position += Right * velocity * 0.35f;
+            }
+        }
     }
 
     // Обрабатываем входные данные, полученные от системы ввода с помощью мыши. Ожидаем в качестве параметров значения смещения как в направлении x, так и в направлении y

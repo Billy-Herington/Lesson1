@@ -5,26 +5,30 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
+#include <SFML/Graphics.hpp>
+#include <SFML/OpenGL.hpp>
+
 #include "shader.h"
 #include "camera.h"
+#include "window.h"
+//#include "events.h"
 
 #include <iostream>
 #include "stb_image.h"
-
-
+/*
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset);
+*/
 void processInput(GLFWwindow* window);
 unsigned int loadTexture(const char* path);
-bool check(int x, int y, int z);
 
 // Константы
 const unsigned int SCR_WIDTH = 600;
 const unsigned int SCR_HEIGHT = 400;
 
 // Камера
-Camera camera(glm::vec3(0.0f, 0.0f, 3.0f));
+Camera camera(glm::vec3(0.0f, 10.0f, 3.0f));
 float lastX = SCR_WIDTH / 2.0f;
 float lastY = SCR_HEIGHT / 2.0f;
 bool firstMouse = true;
@@ -37,35 +41,39 @@ float lastFrame = 0.0f;
 glm::vec3 lightPos(1.2f, 1.0f, 2.0f);
 
 // Массив кубов
-bool mass[1000][1000][1000];
+//int map[256][256];
 
 int main()
 {
+    Window::initialize(SCR_WIDTH, SCR_HEIGHT, "Window");
+    //Events::initialize();
     // glfw: инициализация и конфигурирование
-    glfwInit();
+    /*glfwInit();
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-
-#ifdef __APPLE__
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE); // раскомментируйте эту строку, если используете macOS
-#endif
+    */
 
     // glfw: создание окна
-    GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "OpenGL for Ravesli.com", NULL, NULL);
-    if (window == NULL)
+    //GLFWwindow* window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "OpenGL for Ravesli.com", NULL, NULL);
+    /*if (window == NULL)
     {
         std::cout << "Failed to create GLFW window" << std::endl;
         glfwTerminate();
         return -1;
     }
-    glfwMakeContextCurrent(window);
+    */
+    //glfwMakeContextCurrent(window);
+    /*
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
     glfwSetCursorPosCallback(window, mouse_callback);
     glfwSetScrollCallback(window, scroll_callback);
-
+    */
     // Сообщаем GLFW, чтобы он захватил наш курсор
-    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    Window::setCursorMode(GLFW_CURSOR_DISABLED);
+
+    //glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    
 
     // glad: загрузка всех указателей на OpenGL-функции
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
@@ -80,6 +88,7 @@ int main()
     // Компилирование нашей шейдерной программы
     Shader lightingShader("../src/shaders/multiple_lights.vs", "../src/shaders/multiple_lights.fs");
     Shader lightCubeShader("../src/shaders/light_cube.vs", "../src/shaders/light_cube.fs");
+    Shader cursorShader("../src/shaders/cursor.vs", "../src/shaders/cursor.fs");
 
     // Указание вершин (и буфера(ов)) и настройка вершинных атрибутов
     float vertices[] = {
@@ -127,6 +136,15 @@ int main()
        -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,  0.0f, 1.0f,
     };
 
+    float cursor[] = {
+
+        -0.03f,  0.0f,
+         0.03f,  0.0f,
+
+         0.0f,   0.04f,
+         0.0f,  -0.04f,
+    };
+
     // Координаты точечных источников света
     glm::vec3 pointLightPositions[] = {
         glm::vec3(0.7f,  0.2f,  2.0f),
@@ -162,24 +180,34 @@ int main()
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
 
+    // 3. Настраиваем VAO перекрестия
+    unsigned int cursorVBO, cursorVAO;
+    glGenVertexArrays(1, &cursorVAO);
+    glGenBuffers(1, &cursorVBO);
+
+    glBindBuffer(GL_ARRAY_BUFFER, cursorVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(cursor), cursor, GL_STATIC_DRAW);
+
+    glBindVertexArray(cursorVAO);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+
     // Загрузка текстур
     unsigned int diffuseMap = loadTexture("../res/textures/wooden_container_2.png");
     unsigned int specularMap = loadTexture("../res/textures/container_2_specular.png");
-
     unsigned int grassBlock = loadTexture("../res/textures/grass_block.png");
 
-
-    /*sf::Image im;  im.loadFromFile("resources/heightmap.png");
+    sf::Image im;
+    im.loadFromFile("../res/textures/heightmap.png");
 
     for (int x = 0; x < 256; x++)
+    {
         for (int z = 0; z < 256; z++)
         {
             int c = im.getPixel(x, z).r / 15;
-            for (int y = 0; y < c; y++)
-                if (y > c - 3) mass[x][y][z] = 1;
+            map[x][z] = c;
         }
-    */
-    
+    };
 
     // Конфигурация шейдеров
     lightingShader.use();
@@ -187,7 +215,7 @@ int main()
     lightingShader.setInt("material.specular", 1);
 
     // Цикл рендеринга
-    while (!glfwWindowShouldClose(window))
+    while (!Window::isShouldClose())
     {
         // Логическая часть работы со временем для каждого кадра
         float currentFrame = glfwGetTime();
@@ -195,10 +223,12 @@ int main()
         lastFrame = currentFrame;
 
         // Обработка ввода
-        processInput(window);
+        processInput(Window::window);
+
+        camera.Collision(deltaTime);
 
         // Рендеринг
-        glClearColor(0.5f, 0.5f, 0.5f, 1.0f);
+        glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         // Убеждаемся, что активировали шейдер прежде, чем настраивать uniform-переменные/объекты_рисования
@@ -276,23 +306,26 @@ int main()
         glBindTexture(GL_TEXTURE_2D, grassBlock);
 
         // Связывание карты отраженного цвета
-       // glActiveTexture(GL_TEXTURE1);
-       // glBindTexture(GL_TEXTURE_2D, specularMap);
+        //glActiveTexture(GL_TEXTURE1);
+        //glBindTexture(GL_TEXTURE_2D, specularMap);
 
         // Рендеринг контейнеров
         glBindVertexArray(cubeVAO);
-        for (int x = 0; x < 1; x++)
+        for (int x = 0; x < 40; x++)
         {
-            for (int z = 0; z < 1; z++)
+            for (int z = 0; z < 40; z++)
             {
-                // Вычисляем матрицу модели для каждого объекта и передаем её в шейдер
-                glm::mat4 model = glm::mat4(1.0f);
-                model = glm::translate(model, glm::vec3((float)x, 0.0f, (float)z));
-                lightingShader.setMat4("model", model);
-
-                glDrawArrays(GL_TRIANGLES, 0, 36);
+                for (int y = 0; map[x][z] > y; y++)
+                {
+                    // Вычисляем матрицу модели для каждого объекта и передаем её в шейдер
+                    glm::mat4 model = glm::mat4(1.0f);
+                    model = glm::translate(model, glm::vec3((float)x + 0.5f, (float)y, (float)z + 0.5f));
+                    lightingShader.setMat4("model", model);
+                    glDrawArrays(GL_TRIANGLES, 0, 36);
+                }
             }
         }
+
 
         // Также отрисовываем объект лампы
         lightCubeShader.use();
@@ -310,8 +343,17 @@ int main()
             glDrawArrays(GL_TRIANGLES, 0, 36);
         }
 
+        // Курсор
+        cursorShader.use();
+        // А теперь мы отрисовываем курсор
+        glBindVertexArray(cursorVAO);
+        glLineWidth(3);
+        glDrawArrays(GL_LINES, 0, 4);
+
         // glfw: обмен содержимым front- и back- буферов. Отслеживание событий ввода/вывода (была ли нажата/отпущена кнопка, перемещен курсор мыши и т.п.)
-        glfwSwapBuffers(window);
+        Window::swapBuffers();
+        //Events::pullEvents();
+        //glfwSwapBuffers(Window::window);
         glfwPollEvents();
     }
 
@@ -321,7 +363,8 @@ int main()
     glDeleteBuffers(1, &VBO);
 
     // glfw: завершение, освобождение всех выделенных ранее GLFW-реcурсов
-    glfwTerminate();
+    Window::terminate();
+    //glfwTerminate();
     return 0;
 }
 
@@ -329,17 +372,18 @@ int main()
 void processInput(GLFWwindow* window)
 {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
-        glfwSetWindowShouldClose(window, true);
+        Window::setShouldClose(true);
 
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-        camera.ProcessKeyboard(FORWARD, deltaTime);
+        camera.ProcessKeyboard(FORWARD, NO, NO, deltaTime);
     if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-        camera.ProcessKeyboard(BACKWARD, deltaTime);
+        camera.ProcessKeyboard(BACKWARD, NO, NO, deltaTime);
     if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-        camera.ProcessKeyboard(LEFT, deltaTime);
+        camera.ProcessKeyboard(LEFT, NO, NO, deltaTime);
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-        camera.ProcessKeyboard(RIGHT, deltaTime);
+        camera.ProcessKeyboard(RIGHT, NO, NO, deltaTime);
 }
+
 
 // glfw: всякий раз, когда изменяются размеры окна (пользователем или операционной системой), вызывается данная callback-функция
 void framebuffer_size_callback(GLFWwindow* window, int width, int height)
@@ -379,6 +423,7 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
 unsigned int loadTexture(char const* path)
 {
     stbi_set_flip_vertically_on_load(true);
+
     unsigned int textureID;
     glGenTextures(1, &textureID);
 
@@ -412,13 +457,4 @@ unsigned int loadTexture(char const* path)
     }
 
     return textureID;
-}
-
-bool check(int x, int y, int z)
-{
-    if ((x < 0) || (x >= 1000) ||
-        (y < 0) || (y >= 1000) ||
-        (z < 0) || (z >= 1000)) return false;
-
-    return mass[x][y][z];
 }
